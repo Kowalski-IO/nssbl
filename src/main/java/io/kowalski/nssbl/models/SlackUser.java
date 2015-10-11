@@ -1,4 +1,4 @@
-package io.kowalski.nssc.models;
+package io.kowalski.nssbl.models;
 
 import java.io.Serializable;
 

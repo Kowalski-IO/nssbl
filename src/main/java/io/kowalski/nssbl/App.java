@@ -1,4 +1,4 @@
-package io.kowalski.nssc;
+package io.kowalski.nssbl;
 
 import java.io.IOException;
 
@@ -7,8 +7,8 @@ import javax.websocket.Session;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 
-import io.kowalski.nssc.guice.GuiceModule;
-import io.kowalski.nssc.manager.WebSocketManager;
+import io.kowalski.nssbl.guice.GuiceModule;
+import io.kowalski.nssbl.manager.WebSocketManager;
 
 public class App {
 	
@@ -19,11 +19,8 @@ public class App {
 		
 		Session session = socketManager.retreiveWebSocketSession().get();
 		
-		System.out.println(session.getProtocolVersion());
-		
 		while (true) {
 			Thread.sleep(1000);
-		}
-		
+		}	
 	}
 }

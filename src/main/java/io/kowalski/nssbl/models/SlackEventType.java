@@ -1,4 +1,4 @@
-package io.kowalski.nssc.models;
+package io.kowalski.nssbl.models;
 
 public enum SlackEventType {
 	
@@ -62,7 +62,7 @@ public enum SlackEventType {
 	TEAM_MIGRATION_STARTED,
 	UNRECOGNIZED;
 	
-	public SlackEventType stringToEnum(final String eventType) {
+	public static final SlackEventType stringToEnum(final String eventType) {
 		return SlackEventType.valueOf(eventType.toUpperCase()) != null ?
 				SlackEventType.valueOf(eventType.toUpperCase()) 
 				: SlackEventType.UNRECOGNIZED;

@@ -1,4 +1,4 @@
-package io.kowalski.nssc.manager;
+package io.kowalski.nssbl.manager;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -14,7 +14,7 @@ import com.squareup.okhttp.OkHttpClient;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.Response;
 
-import io.kowalski.nssc.models.SlackSession;
+import io.kowalski.nssbl.models.SlackSession;
 
 public class SlackSessionManager {
 
