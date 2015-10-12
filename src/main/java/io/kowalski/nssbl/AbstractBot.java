@@ -17,11 +17,10 @@ public abstract class AbstractBot implements Runnable {
 	public AbstractBot(final WebSocketManager socketManager) {
 		this.queue = new ArrayBlockingQueue<SlackEvent>(2048);
 		this.socketManager = socketManager;
-		this.socketManager.setQueue(queue);
 	}
 	
 	@Override
 	public void run() {
-		socketManager.retreiveWebSocketSession().get();
+		socketManager.connect();
 	}
 }

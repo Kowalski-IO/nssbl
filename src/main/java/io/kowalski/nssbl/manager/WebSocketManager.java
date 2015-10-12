@@ -29,31 +29,63 @@ import io.kowalski.nssbl.models.SlackEventType;
 public class WebSocketManager {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketManager.class);
-
-	private static final ObjectMapper mapper;
-
-	static {
-		mapper = new ObjectMapper();
-		mapper.setPropertyNamingStrategy(PropertyNamingStrategy.CAMEL_CASE_TO_LOWER_CASE_WITH_UNDERSCORES);
-	}
-
-	private final ClientEndpointConfig configuration = ClientEndpointConfig.Builder.create().build();
-	private final Set<SlackEventType> ingoredSlackEventTypes;
+	
+	private final ObjectMapper mapper;
+	private final ClientEndpointConfig configuration;
+	
 	private final SlackSessionManager sessionManager;
-	private final String botID;
 
+	private final BlockingQueue<SlackEvent> slackEventQueue;
+	private final Set<SlackEventType> ingoredSlackEventTypes;
+	
+	private final boolean autoReconnect;
+	
 	private Session websocketSession;
-	private BlockingQueue<SlackEvent> queue;
+	
+	private final String botID;
+	
+	private Thread keepAliveThread;
+	
+	private volatile boolean shutdownRequested = false;
+	
+	private volatile long lastPing = -1;
+	private volatile long lastPingAck = -1;
 
+	private volatile long messageID = 0;
+	
 	@Inject
 	public WebSocketManager(final SlackSessionManager sessionManager, @Named("botID") final String botID,
-			final Set<SlackEventType> ingoredSlackEventTypes) {
+			final Set<SlackEventType> ingoredSlackEventTypes, final BlockingQueue<SlackEvent> slackEventQueue,
+			@Named("autoReconnect") final boolean autoReconnect) {
 		this.sessionManager = sessionManager;
 		this.botID = botID;
 		this.ingoredSlackEventTypes = ingoredSlackEventTypes;
+		this.slackEventQueue = slackEventQueue;
+		this.autoReconnect = autoReconnect;
+		
+		// Bootstrap util objects
+		this.configuration = ClientEndpointConfig.Builder.create().build();
+		this.mapper = new ObjectMapper();
+		this.mapper.setPropertyNamingStrategy(PropertyNamingStrategy.CAMEL_CASE_TO_LOWER_CASE_WITH_UNDERSCORES);
+	}
+	
+	public final void connect() throws IllegalStateException {
+		this.retreiveWebSocketSession();
+		this.dispatchKeepAliveThread();
+	}
+	
+	public final void disconnect() {
+		try {
+			this.keepAliveThread.interrupt();
+			this.websocketSession.close();
+		} catch (IOException e) {
+			LOGGER.error("Unable to close websocket.");
+		} finally {
+			websocketSession = null;
+		}
 	}
 
-	public final Optional<Session> retreiveWebSocketSession() {
+	private void retreiveWebSocketSession() throws IllegalStateException {
 		if (!sessionManager.retreiveSession().isPresent()) {
 			throw new IllegalStateException("Slack session could not be instatiated. Aborting...");
 		}
@@ -74,7 +106,7 @@ public class WebSocketManager {
 									if (slackEvent.get().getEventType().equals(SlackEventType.HELLO)) {
 										LOGGER.info("Successfully connected to Slacker RTM.");
 									} else if (!ingoredSlackEventTypes.contains(slackEvent.get().getEventType())) {
-										queue.add(slackEvent.get());
+										slackEventQueue.add(slackEvent.get());
 									}
 								}
 							}
@@ -85,8 +117,54 @@ public class WebSocketManager {
 				LOGGER.error(e.toString());
 			}
 		}
-
-		return Optional.ofNullable(websocketSession);
+		if (websocketSession == null) {
+			LOGGER.error("Unable to connect to Slack RTM. Aborting...");
+			throw new IllegalStateException("Unable to connect to Slack RTM. Aborting...");
+		}
+	}
+	
+	private void dispatchKeepAliveThread() {
+		this.keepAliveThread = new Thread("RTM Keep Alive Thread") {
+			@Override
+			public void run() {
+				LOGGER.info("Initializing keep alive thread.");
+				
+				while (!shutdownRequested) {
+					if (lastPing != lastPingAck || websocketSession == null) {
+						LOGGER.info("Slack RTM connection lost.");
+						
+						try {
+							if (websocketSession != null) {
+								websocketSession.close();
+							}
+						} catch (IOException e) {
+							LOGGER.error("Unable to close out existing websocket session. Nulling out and continuing.");
+						} finally {
+							websocketSession = null;
+						}
+						
+						if (autoReconnect) {
+							LOGGER.info("Auto rejoin enabled. Attempting rejoin...");
+							retreiveWebSocketSession();
+						} else {
+							LOGGER.info("Auto rejoin disabled. Shutting down");
+							break;
+						}
+						
+					} else {
+						try {
+							websocketSession.getBasicRemote().sendText("{\"type\":\"ping\",\"id\":" + retreiveMessageId() + "}");
+							Thread.sleep(10000);
+						} catch (IOException | InterruptedException e) {
+							LOGGER.error("Unable to send ping message. Shutting down...");
+							break;
+						}
+					}
+				}	
+				LOGGER.info("Keep alive thread stopped.");
+				return;
+			}
+		};
 	}
 
 	private Optional<SlackEvent> buildSlackEvent(final String message) {
@@ -98,15 +176,15 @@ public class WebSocketManager {
 		} catch (IOException e) {
 			LOGGER.error("Unable to parse slack event.", e);
 		}
-
 		return Optional.ofNullable(slackEvent);
+	}
+	
+	private synchronized long retreiveMessageId() {
+		this.messageID = this.messageID + 1;
+		return messageID;
 	}
 
 	public final SlackSessionManager getSessionManager() {
 		return sessionManager;
-	}
-
-	public final void setQueue(final BlockingQueue<SlackEvent> queue) {
-		this.queue = queue;
 	}
 }

@@ -30,7 +30,7 @@ public class SlackSessionManager {
 	private final String realTimeMessagingURL = "https://slack.com/api/rtm.start?token=";
 	private final String realTimeMessagingToken;
 
-	private SlackSession slackSession;
+	
 
 	@Inject
 	public SlackSessionManager(@Named("slackToken") final String realTimeMessagingToken) {
@@ -38,17 +38,15 @@ public class SlackSessionManager {
 	}
 
 	public final Optional<SlackSession> retreiveSession() {
-		if (slackSession == null) {
-			createSession();
-		}
-		return Optional.ofNullable(slackSession);
+		return Optional.ofNullable(createSession());
 	}
 	
 	public final void refreshSession() {
 		createSession();
 	}
 
-	private void createSession() {
+	private SlackSession createSession() {
+		SlackSession slackSession = null;
 		Request request = new Request.Builder().url(realTimeMessagingURL + realTimeMessagingToken).build();
 		try {
 			Response response = client.newCall(request).execute();
@@ -56,5 +54,6 @@ public class SlackSessionManager {
 		} catch (IOException e) {
 			LOGGER.error("Unable to instantiate Slack Session", e);
 		}
+		return slackSession;
 	}
 }
