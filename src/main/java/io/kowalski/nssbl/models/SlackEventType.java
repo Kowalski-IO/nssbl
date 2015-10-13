@@ -2,6 +2,8 @@ package io.kowalski.nssbl.models;
 
 public enum SlackEventType {
 	
+	PING,
+	PONG,
 	HELLO,
 	MESSAGE,
 	USER_TYPING,

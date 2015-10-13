@@ -29,9 +29,7 @@ public class GuiceModule extends AbstractModule {
 
 	@Override
 	protected void configure() {
-		 bindConstant().annotatedWith(Names.named("slackToken")).to("xoxb-12095707300-T4CfPUksPaNKDDsHboBEQogS");
-		 bindConstant().annotatedWith(Names.named("messageBrokerHost")).to("192.168.99.100");
-		 bindConstant().annotatedWith(Names.named("messageBrokerPort")).to(32768);
+		 bindConstant().annotatedWith(Names.named("slackToken")).to("");
 		 bindConstant().annotatedWith(Names.named("botID")).to("senapi");
 		 bindConstant().annotatedWith(Names.named("autoReconnect")).to(true);
 		 bind(Key.get(new TypeLiteral<BlockingQueue<SlackEvent>>(){})).toInstance(queue);

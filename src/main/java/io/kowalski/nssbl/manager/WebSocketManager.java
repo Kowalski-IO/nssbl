@@ -30,6 +30,8 @@ public class WebSocketManager {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketManager.class);
 	
+	private final long timeoutLimit = 3000L;
+	
 	private final ObjectMapper mapper;
 	private final ClientEndpointConfig configuration;
 	
@@ -40,17 +42,14 @@ public class WebSocketManager {
 	
 	private final boolean autoReconnect;
 	
-	private Session websocketSession;
-	
 	private final String botID;
 	
 	private Thread keepAliveThread;
 	
+	private volatile Session websocketSession;
 	private volatile boolean shutdownRequested = false;
-	
 	private volatile long lastPing = -1;
 	private volatile long lastPingAck = -1;
-
 	private volatile long messageID = 0;
 	
 	@Inject
@@ -85,7 +84,7 @@ public class WebSocketManager {
 		}
 	}
 
-	private void retreiveWebSocketSession() throws IllegalStateException {
+	public void retreiveWebSocketSession() throws IllegalStateException {
 		if (!sessionManager.retreiveSession().isPresent()) {
 			throw new IllegalStateException("Slack session could not be instatiated. Aborting...");
 		}
@@ -103,7 +102,11 @@ public class WebSocketManager {
 							public void onMessage(final String message) {
 								Optional<SlackEvent> slackEvent = buildSlackEvent(message);
 								if (slackEvent.isPresent()) {
-									if (slackEvent.get().getEventType().equals(SlackEventType.HELLO)) {
+									if (slackEvent.get().getEventType().equals(SlackEventType.PONG)) {
+										LOGGER.info("Pong received: " + slackEvent.get().getReplyTo());
+										lastPingAck = System.currentTimeMillis();
+									}
+									else if (slackEvent.get().getEventType().equals(SlackEventType.HELLO)) {
 										LOGGER.info("Successfully connected to Slacker RTM.");
 									} else if (!ingoredSlackEventTypes.contains(slackEvent.get().getEventType())) {
 										slackEventQueue.add(slackEvent.get());
@@ -124,47 +127,8 @@ public class WebSocketManager {
 	}
 	
 	private void dispatchKeepAliveThread() {
-		this.keepAliveThread = new Thread("RTM Keep Alive Thread") {
-			@Override
-			public void run() {
-				LOGGER.info("Initializing keep alive thread.");
-				
-				while (!shutdownRequested) {
-					if (lastPing != lastPingAck || websocketSession == null) {
-						LOGGER.info("Slack RTM connection lost.");
-						
-						try {
-							if (websocketSession != null) {
-								websocketSession.close();
-							}
-						} catch (IOException e) {
-							LOGGER.error("Unable to close out existing websocket session. Nulling out and continuing.");
-						} finally {
-							websocketSession = null;
-						}
-						
-						if (autoReconnect) {
-							LOGGER.info("Auto rejoin enabled. Attempting rejoin...");
-							retreiveWebSocketSession();
-						} else {
-							LOGGER.info("Auto rejoin disabled. Shutting down");
-							break;
-						}
-						
-					} else {
-						try {
-							websocketSession.getBasicRemote().sendText("{\"type\":\"ping\",\"id\":" + retreiveMessageId() + "}");
-							Thread.sleep(10000);
-						} catch (IOException | InterruptedException e) {
-							LOGGER.error("Unable to send ping message. Shutting down...");
-							break;
-						}
-					}
-				}	
-				LOGGER.info("Keep alive thread stopped.");
-				return;
-			}
-		};
+		keepAliveThread = new Thread(new KeepAlive(), "Keep Alive");
+		keepAliveThread.start();
 	}
 
 	private Optional<SlackEvent> buildSlackEvent(final String message) {
@@ -186,5 +150,48 @@ public class WebSocketManager {
 
 	public final SlackSessionManager getSessionManager() {
 		return sessionManager;
+	}
+	
+	private class KeepAlive implements Runnable {
+		@Override
+		public void run() {
+			LOGGER.info("Initializing keep alive thread.");
+			while (!shutdownRequested) {
+				if (Math.abs(lastPingAck - lastPing) >= timeoutLimit || websocketSession == null) {
+					lastPing = -1L;
+					lastPingAck = -1L;
+					LOGGER.info("Slack RTM connection lost.");
+					try {
+						if (websocketSession != null) {
+							websocketSession.close();
+						}
+					} catch (IOException e) {
+						LOGGER.error("Unable to close out existing websocket session. Nulling out and continuing.");
+					} finally {
+						websocketSession = null;
+					}
+					
+					if (autoReconnect) {
+						LOGGER.info("Auto rejoin enabled. Attempting rejoin...");
+						retreiveWebSocketSession();
+					} else {
+						LOGGER.info("Auto rejoin disabled. Shutting down");
+						break;
+					}	
+				} else {
+					try {
+						websocketSession.getBasicRemote().sendText("{\"type\":\"ping\",\"id\":" + retreiveMessageId() + "}");
+						LOGGER.info("Ping sent!");
+						lastPing = System.currentTimeMillis();
+						Thread.sleep(10000);
+					} catch (IOException | InterruptedException e) {
+						LOGGER.error("Unable to send ping message. Shutting down...");
+						break;
+					}
+				}
+			}	
+			LOGGER.info("Keep alive thread stopped.");
+			return;
+		}	
 	}
 }

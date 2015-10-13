@@ -30,8 +30,6 @@ public class SlackSessionManager {
 	private final String realTimeMessagingURL = "https://slack.com/api/rtm.start?token=";
 	private final String realTimeMessagingToken;
 
-	
-
 	@Inject
 	public SlackSessionManager(@Named("slackToken") final String realTimeMessagingToken) {
 		this.realTimeMessagingToken = realTimeMessagingToken;

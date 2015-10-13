@@ -9,7 +9,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class SlackEvent implements Serializable {
 
 	private static final long serialVersionUID = -1905457317422979510L;
-
+	
+	@JsonProperty("reply_to")
+	private String replyTo;
+	
 	private String botID;
 	private SlackEventType eventType;
 
@@ -31,9 +34,21 @@ public class SlackEvent implements Serializable {
 	@JsonProperty("text")
 	private String body;
 	
+	// For Ping / Pong Messages
+	@JsonProperty("time")
+	private String pingPongTime;
+	
 	@Override
 	public final String toString() {
 		return userID + ": " + body;
+	}
+
+	public final String getReplyTo() {
+		return replyTo;
+	}
+
+	public final void setReplyTo(final String replyTo) {
+		this.replyTo = replyTo;
 	}
 
 	public final String getQueueName() {
@@ -102,5 +117,13 @@ public class SlackEvent implements Serializable {
 
 	public final void setBody(final String body) {
 		this.body = body;
+	}
+
+	public final String getPingPongTime() {
+		return pingPongTime;
+	}
+
+	public final void setPingPongTime(final String pingPongTime) {
+		this.pingPongTime = pingPongTime;
 	}
 }
